@@ -16,6 +16,37 @@ const statusColor = (result: string | null) => {
   return { bg: "bg-warn/60", dot: "bg-warn" };
 };
 
+const ScheduleButton = ({ inspectionId, onScheduled }: { inspectionId: string; onScheduled: () => void }) => {
+  const [open, setOpen] = useState(false);
+  const [date, setDate] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (!date) { return; }
+    setSaving(true);
+    await supabase.from("inspections").update({ scheduled_date: date, result: "SCHEDULED" } as any).eq("id", inspectionId);
+    setSaving(false);
+    setOpen(false);
+    onScheduled();
+  };
+
+  if (!open) return (
+    <button onClick={() => setOpen(true)} className="px-3 py-1 font-raj text-[10px] font-bold tracking-[1px] bg-transparent border border-gold/30 text-gold hover:bg-gold/10 transition-all cursor-pointer whitespace-nowrap">
+      SCHEDULE →
+    </button>
+  );
+
+  return (
+    <div className="flex items-center gap-2">
+      <input type="date" value={date} onChange={e => setDate(e.target.value)} className="bg-[rgba(0,0,0,0.4)] border border-gold/30 text-cream font-mono text-[11px] px-2 py-1 outline-none focus:border-gold" />
+      <button onClick={save} disabled={saving} className="px-2 py-1 font-raj text-[10px] font-bold text-ok border border-ok/30 hover:bg-ok/10 transition-all cursor-pointer">
+        {saving ? "..." : "✓"}
+      </button>
+      <button onClick={() => setOpen(false)} className="px-2 py-1 font-raj text-[10px] text-mil-muted border border-[rgba(255,255,255,0.1)] hover:text-cream transition-all cursor-pointer">✕</button>
+    </div>
+  );
+};
+
 const GlobalInspectionsCalendar = () => {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
@@ -41,6 +72,38 @@ const GlobalInspectionsCalendar = () => {
 
   return (
     <div>
+      {/* Pending inspection requests — need Sonny/Arnel to schedule */}
+      {(() => {
+        const pending = inspections.filter(i => (i.result || "").toUpperCase() === "REQUESTED");
+        if (pending.length === 0) return null;
+        return (
+          <div className="mb-4 p-3 bg-[rgba(201,168,76,0.08)] border border-warn/30">
+            <div className="font-raj text-[11px] font-bold text-warn tracking-[1px] mb-2">
+              ⚠️ {pending.length} INSPECTION REQUEST{pending.length > 1 ? "S" : ""} AWAITING SCHEDULING
+            </div>
+            <div className="space-y-2">
+              {pending.map(insp => {
+                const job = jobs.find(j => j.id === insp.job_id);
+                return (
+                  <div key={insp.id} className="flex items-center justify-between gap-3 px-3 py-2 bg-[rgba(0,0,0,0.2)] border border-[rgba(255,255,255,0.05)]">
+                    <div>
+                      <span className="text-xs font-raj font-bold text-gold">{job?.name || "Unknown Job"}</span>
+                      <span className="text-xs text-cream ml-2">— {insp.inspection_type}</span>
+                      {(insp as any).phase_name && <span className="text-[10px] text-mil-muted ml-2">({(insp as any).phase_name})</span>}
+                      {insp.notes && <div className="text-[10px] text-mil-muted italic mt-[2px]">{insp.notes}</div>}
+                    </div>
+                    <ScheduleButton inspectionId={insp.id} onScheduled={() => {
+                      supabase.from("inspections").select("*").then(({ data }) => {
+                        if (data) setInspections(data as Inspection[]);
+                      });
+                    }} />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
       <SectionHeader label="INSPECTIONS CALENDAR — ALL JOBS" />
       <div className="flex items-center justify-between mb-4">
         <div className="font-raj text-xl font-bold text-gold tracking-wider">{MONTHS[month]} {year}</div>

@@ -92,6 +92,8 @@ const DesignPermitTab = ({ job, jobId }: { job: any; jobId: string }) => {
   const [activeSubmittalId, setActiveSubmittalId] = useState<string | null>(null);
   const [expandedUtility, setExpandedUtility] = useState<string | null>(null);
   const [showCallLog, setShowCallLog] = useState<string | null>(null);
+  const [checklist, setChecklist] = useState<any[]>([]);
+  const [expandedItem, setExpandedItem] = useState<string | null>(null);
 
   const [showAddDeliverable, setShowAddDeliverable] = useState(false);
   const [newDel, setNewDel] = useState({ type: 'architectural_plans', name: '', assigned_to: 'Sigfried', due_date: '', is_required: true });
@@ -131,6 +133,8 @@ const DesignPermitTab = ({ job, jobId }: { job: any; jobId: string }) => {
     setTests(testData || []);
     const { data: utilData } = await supabase.from('utility_coordination').select('*').eq('job_id', jobId).order('utility_type');
     setUtilities(utilData || []);
+    const { data: checklistData } = await supabase.from('submittal_checklist_items').select('*').eq('job_id', jobId).order('sort_order');
+    setChecklist(checklistData || []);
     setLoading(false);
   };
 
@@ -300,6 +304,15 @@ const DesignPermitTab = ({ job, jobId }: { job: any; jobId: string }) => {
     setComments(prev => prev.map(c => c.id === id ? { ...c, resolution_status: 'resolved' } : c));
     toast.success('Comment resolved');
   };
+
+  const toggleChecklistItem = async (id: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'complete' ? 'not_started' : 'complete';
+    await supabase.from('submittal_checklist_items').update({ status: newStatus } as any).eq('id', id);
+    setChecklist(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
+  };
+
+  const deferredItems = checklist.filter(c => c.is_deferred && c.status !== 'complete' && c.status !== 'not_applicable');
+  const permitIssued = submittals.some((s: any) => s.permit_number && s.permit_issued_date);
 
   const totalDeliverables = deliverables.filter(d => d.is_required && d.status !== 'not_required').length;
   const completeDeliverables = deliverables.filter(d => d.status === 'complete' || d.status === 'stamped').length;
@@ -809,7 +822,162 @@ const DesignPermitTab = ({ job, jobId }: { job: any; jobId: string }) => {
         )}
       </div>
 
-      {/* ─── SECTION 3: EXTERNAL CONSULTANTS ─────────────────────── */}
+      {/* ─── DEFERRED SUBMITTALS ALERT ───────────────────────────── */}
+      {permitIssued && deferredItems.length > 0 && (
+        <div className="p-3 border-2 border-danger bg-danger/08">
+          <div className="font-raj text-danger font-bold tracking-wider text-sm mb-2">
+            ⛔ PERMIT ISSUED — {deferredItems.length} DEFERRED SUBMITTAL(S) PENDING
+          </div>
+          <div className="text-[11px] text-cream mb-2">These must be submitted NOW. Each one can stall a job inspection.</div>
+          {deferredItems.map((item: any) => (
+            <div key={item.id} className="flex items-center gap-2 py-1">
+              <span className="text-[8px] text-danger font-raj font-bold">⚠</span>
+              <span className="text-[11px] text-cream">{item.item_text}</span>
+              <span className="text-[9px] text-mil-muted">→ {item.responsible}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ─── SECTION 3: PRE-SUBMITTAL CHECKLIST ─────────────────── */}
+      {checklist.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <Label>Pre-Submittal Checklist</Label>
+              <div className="text-[9px] text-mil-muted mt-1">Click any item to expand WHO / WHAT / WHEN / WHERE / HOW details</div>
+            </div>
+            <div className="font-mono text-xs text-mil-muted">{checklist.filter(c => c.status === 'complete').length}/{checklist.length}</div>
+          </div>
+          <div className="border border-[rgba(255,255,255,0.06)] overflow-hidden">
+            {checklist.map((item: any) => (
+              <div key={item.id} className={`border-b border-[rgba(255,255,255,0.03)] ${item.is_deferred ? 'border-l-2 border-l-danger' : ''}`}>
+                {/* COLLAPSED ROW */}
+                <div
+                  className={`flex items-start gap-2 px-3 py-[7px] cursor-pointer hover:bg-[rgba(255,255,255,0.02)]
+                    ${item.status === 'complete' ? 'opacity-50' : ''}
+                    ${item.is_blocker && item.status !== 'complete' ? 'bg-[rgba(196,56,40,0.04)]' : ''}
+                  `}
+                  onClick={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
+                >
+                  <input
+                    type="checkbox"
+                    checked={item.status === 'complete'}
+                    onChange={e => { e.stopPropagation(); toggleChecklistItem(item.id, item.status); }}
+                    className="accent-gold mt-[2px] flex-shrink-0 cursor-pointer"
+                    onClick={e => e.stopPropagation()}
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-[11px] ${item.status === 'complete' ? 'line-through text-mil-muted' : 'text-cream'}`}>
+                        {item.item_number}. {item.item_text}
+                      </span>
+                      {item.is_deferred && (
+                        <span className="text-[8px] font-raj font-bold text-danger bg-danger/10 px-1 border border-danger/20">DEFERRED</span>
+                      )}
+                      {item.is_blocker && item.status !== 'complete' && (
+                        <span className="text-[8px] font-raj font-bold text-warn bg-warn/10 px-1">BLOCKER</span>
+                      )}
+                    </div>
+                    {item.recipient_who && (
+                      <div className="text-[9px] text-mil-muted mt-[2px]">→ {item.recipient_who}</div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="text-[9px] text-mil-muted">{item.responsible}</span>
+                    <span className="text-[8px] text-mil-muted">{expandedItem === item.id ? '▲' : '▼'}</span>
+                  </div>
+                </div>
+
+                {/* EXPANDED DETAIL */}
+                {expandedItem === item.id && (
+                  <div className="mx-3 mb-3 px-3 py-3 bg-[rgba(0,0,0,0.2)] border border-[rgba(255,255,255,0.06)]">
+                    {item.recipient_who && (
+                      <div className="mb-2">
+                        <div className="text-[9px] text-mil-muted font-raj tracking-wider uppercase mb-1">WHO</div>
+                        <div className="text-[11px] text-cream">{item.recipient_who}</div>
+                      </div>
+                    )}
+                    {item.submit_what && (
+                      <div className="mb-2">
+                        <div className="text-[9px] text-mil-muted font-raj tracking-wider uppercase mb-1">WHAT TO SUBMIT</div>
+                        <div className="text-[11px] text-cream whitespace-pre-line">{item.submit_what}</div>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-3 mb-2">
+                      {item.submit_when && (
+                        <div>
+                          <div className="text-[9px] text-mil-muted font-raj tracking-wider uppercase mb-1">WHEN</div>
+                          <div className="text-[11px] text-cream">{item.submit_when}</div>
+                        </div>
+                      )}
+                      {item.submit_where && (
+                        <div>
+                          <div className="text-[9px] text-mil-muted font-raj tracking-wider uppercase mb-1">WHERE</div>
+                          <div className="text-[11px] text-cream">{item.submit_where}</div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 mb-2">
+                      {item.submit_copies && (
+                        <div>
+                          <div className="text-[9px] text-mil-muted font-raj tracking-wider uppercase mb-1">FORMAT / COPIES</div>
+                          <div className="text-[11px] text-cream">{item.submit_copies}</div>
+                        </div>
+                      )}
+                      {item.review_timeline && (
+                        <div>
+                          <div className="text-[9px] text-mil-muted font-raj tracking-wider uppercase mb-1">REVIEW TIME</div>
+                          <div className="text-[11px] text-cream">{item.review_timeline}</div>
+                        </div>
+                      )}
+                    </div>
+                    {item.if_missed && (
+                      <div className={`p-2 mt-1 ${item.is_deferred ? 'bg-danger/08 border border-danger/20' : 'bg-[rgba(0,0,0,0.2)]'}`}>
+                        <div className="text-[9px] text-danger font-raj font-bold tracking-wider uppercase mb-1">⚠ IF MISSED OR DELAYED</div>
+                        <div className="text-[11px] text-cream">{item.if_missed}</div>
+                      </div>
+                    )}
+                    {item.is_deferred && item.deferred_trigger && (
+                      <div className="mt-2 p-2 bg-warn/05 border border-warn/20">
+                        <div className="text-[9px] text-warn font-raj font-bold uppercase mb-1">TRIGGER</div>
+                        <div className="text-[11px] text-cream">{item.deferred_trigger}</div>
+                      </div>
+                    )}
+                    <div className="flex gap-2 mt-2 pt-2 border-t border-[rgba(255,255,255,0.05)]">
+                      <select
+                        value={item.status}
+                        onChange={async e => {
+                          await supabase.from('submittal_checklist_items').update({ status: e.target.value } as any).eq('id', item.id);
+                          setChecklist(prev => prev.map(c => c.id === item.id ? { ...c, status: e.target.value } : c));
+                        }}
+                        className="bg-ink border border-[rgba(255,255,255,0.1)] text-cream text-[10px] px-2 py-1 outline-none cursor-pointer"
+                      >
+                        <option value="not_started">Not Started</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="complete">Complete ✓</option>
+                        <option value="not_applicable">N/A</option>
+                        <option value="blocked">Blocked</option>
+                      </select>
+                      <input
+                        placeholder="Notes..."
+                        defaultValue={item.notes || ''}
+                        onBlur={async e => {
+                          await supabase.from('submittal_checklist_items').update({ notes: e.target.value } as any).eq('id', item.id);
+                          setChecklist(prev => prev.map(c => c.id === item.id ? { ...c, notes: e.target.value } : c));
+                        }}
+                        className="flex-1 bg-ink border border-[rgba(255,255,255,0.1)] text-cream text-[10px] px-2 py-1 outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ─── SECTION 4: EXTERNAL CONSULTANTS ─────────────────────── */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <Label>External Consultants</Label>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Job, Task, JobData } from "@/lib/types";
 import Header from "@/components/pm/Header";
@@ -24,6 +24,7 @@ const Index = () => {
   const [activeView, setActiveView] = useState("dashboard");
   const [loading, setLoading] = useState(true);
   const [pendingAuthCount, setPendingAuthCount] = useState(0);
+  const jobDetailRef = useRef<HTMLDivElement>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -78,6 +79,7 @@ const Index = () => {
       changeOrders: changeOrders.data || [],
     });
     setLoading(false);
+    setTimeout(() => { jobDetailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
   };
 
   const closeDetail = () => { setSelectedJobId(null); setJobData(null); };
@@ -133,14 +135,16 @@ const Index = () => {
             )}
             <MetricsStrip metrics={metrics} />
             <AlertStrips warns={warns} cautions={cautions} wins={wins} onJobClick={selectJob} />
-            <SectionHeader label="JOB SCORECARDS"><Btn variant="ghost" size="sm" onClick={() => toast.info("New Job: add via database.")}>+ NEW JOB</Btn></SectionHeader>
+            <SectionHeader label="JOB SCORECARDS"><Btn variant="ghost" size="sm" onClick={() => toast.info("Create the estimate in Estimating Studio, then convert it to activate the job here.", { duration: 5000 })}>+ NEW JOB</Btn></SectionHeader>
+            {selectedJob && jobData && (
+              <div ref={jobDetailRef}>
+                <JobDetail job={selectedJob} data={jobData} onClose={closeDetail} onDataChange={setJobData} onJobUpdate={(updates) => setJobs(jobs.map((j) => j.id === selectedJobId ? { ...j, ...updates } : j))} />
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-3 mb-5 max-lg:grid-cols-2 max-md:grid-cols-1">
               {jobs.map((job) => <JobCard key={job.id} job={job} selected={selectedJobId === job.id} onSelect={selectJob} />)}
               {jobs.length === 0 && <div className="text-mil-muted p-10 col-span-full text-center">No jobs found. Add job data to your database to get started.</div>}
             </div>
-            {selectedJob && jobData && (
-              <JobDetail job={selectedJob} data={jobData} onClose={closeDetail} onDataChange={setJobData} onJobUpdate={(updates) => setJobs(jobs.map((j) => j.id === selectedJobId ? { ...j, ...updates } : j))} />
-            )}
           </>
         )}
 

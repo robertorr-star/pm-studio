@@ -46,7 +46,7 @@
     --sidebar-ring: 43 50% 54%;
 
     /* OCD Brand Colors */
-    --ink: #0D1B2A;
+    --ink: #0B1A0B;
     --ink2: #1A2D3F;
     --ink3: #243548;
     --gold: #C9A84C;
@@ -116,3 +116,22 @@
 .animate-blink { animation: blink 2s infinite; }
 .animate-fade-up { animation: fadeUp 0.3s ease; }
 .animate-spin-custom { animation: spin 0.8s linear infinite; }
+
+/* ─── No Gridlines — OCC Brand ─── */
+table {
+  border-collapse: collapse;
+}
+table td,
+table th {
+  border-left: none !important;
+  border-right: none !important;
+  border-top: none !important;
+  border-bottom: none !important;
+}
+thead tr th {
+  border-bottom: none !important;
+}
+[class~="border-b"][class*="border-[rgba(255"] {
+  border-bottom-width: 0 !important;
+  border-bottom-color: transparent !important;
+}

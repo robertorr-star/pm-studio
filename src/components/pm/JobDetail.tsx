@@ -63,9 +63,9 @@ const JobDetail = ({ job, data, onClose, onDataChange, onJobUpdate }: JobDetailP
       case "manhours": return <ManHoursTab manHours={data.manHours} jobId={job.id} onManHoursChange={(mh) => onDataChange({ ...data, manHours: mh })} />;
       case "photos": return <PhotosTab />;
       case "punchlist": return <PunchListTab punchItems={[]} jobId={job.id} onItemsChange={() => {}} />;
-      case "changeorders": return <ChangeOrdersTab changeOrders={data.changeOrders} />;
+      case "changeorders": return <ChangeOrdersTab changeOrders={data.changeOrders} jobId={job.id} />;
       case "documents": return <DocumentsTab job={job} data={data} />;
-      case "subs": return <SubsTab subs={data.subs} lienReleases={data.lienReleases} />;
+      case "subs": return <SubsTab subs={data.subs} lienReleases={data.lienReleases} jobId={job.id} jobName={job.name} />;
       case "billing": return <BillingHubTab job={job} />;
       case "clientcomms": return <ClientCommsTab job={job} data={data} />;
       case "calendar": return <CalendarTab phases={data.phases} />;
@@ -89,6 +89,28 @@ const JobDetail = ({ job, data, onClose, onDataChange, onJobUpdate }: JobDetailP
             ✕ CLOSE
           </button>
         </div>
+      </div>
+
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-[rgba(255,255,255,0.05)]">
+        <span className="font-raj text-[10px] text-mil-muted tracking-[1px] uppercase mr-2">Quick Actions:</span>
+        <button
+          onClick={() => setActiveTab("inspections")}
+          className="flex items-center gap-[6px] px-3 py-[6px] bg-transparent border border-gold/30 font-raj text-[11px] font-bold text-gold tracking-[1px] hover:bg-[rgba(201,168,76,0.1)] transition-all cursor-pointer"
+        >
+          🔍 REQUEST INSPECTION
+        </button>
+        <button
+          onClick={() => setActiveTab("materials")}
+          className="flex items-center gap-[6px] px-3 py-[6px] bg-transparent border border-[rgba(52,152,219,0.3)] font-raj text-[11px] font-bold text-info tracking-[1px] hover:bg-[rgba(52,152,219,0.1)] transition-all cursor-pointer"
+        >
+          📦 REQUEST MATERIAL
+        </button>
+        <button
+          onClick={() => setActiveTab("manhours")}
+          className="flex items-center gap-[6px] px-3 py-[6px] bg-transparent border border-[rgba(255,255,255,0.1)] font-raj text-[11px] font-bold text-mil-muted tracking-[1px] hover:bg-[rgba(255,255,255,0.04)] transition-all cursor-pointer"
+        >
+          ⏱ LOG HOURS
+        </button>
       </div>
 
       <div className="flex overflow-x-auto border-b border-[rgba(255,255,255,0.05)] bg-[rgba(0,0,0,0.2)] scrollbar-none" style={{ WebkitOverflowScrolling: "touch" }}>

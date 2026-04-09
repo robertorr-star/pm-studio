@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import OCDLogo from "./OCDLogo";
+import { NotificationBell } from "./NotificationBell";
 
 interface HeaderProps {
   activeView: string;
@@ -83,6 +84,7 @@ const Header = ({ activeView, onViewChange, taskBadge }: HeaderProps) => {
       </div>
 
       <div className="hidden lg:flex items-center gap-[14px]">
+        <NotificationBell currentUser="Leo" />
         <div className="w-[7px] h-[7px] rounded-full bg-ok animate-blink shadow-[0_0_8px_var(--ok)]" />
         <div className="font-mono text-xs text-[rgba(190,180,154,0.6)]">{clock}</div>
         <button

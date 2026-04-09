@@ -1,8 +1,9 @@
 import type { Sub, LienRelease } from "@/lib/types";
 import { Pill, Label } from "../UIComponents";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
-const SubsTab = ({ subs, lienReleases }: { subs: Sub[]; lienReleases: LienRelease[] }) => {
+const SubsTab = ({ subs, lienReleases, jobId, jobName }: { subs: Sub[]; lienReleases: LienRelease[]; jobId: string; jobName: string }) => {
   const statusMap: Record<string, string> = { active: "active", complete: "complete", pending: "pending" };
   const notifSteps = [
     { days: "21 DAYS", msg: "Scope sent, availability confirmed" },
@@ -47,7 +48,19 @@ const SubsTab = ({ subs, lienReleases }: { subs: Sub[]; lienReleases: LienReleas
                   <td className="p-[9px_10px] text-xs border-b border-[rgba(255,255,255,0.03)]">{s.insurance_expiry || ""}</td>
                   <td className="p-[9px_10px] border-b border-[rgba(255,255,255,0.03)]"><Pill variant={statusMap[s.status || "pending"] || "pending"}>{(s.status || "pending").charAt(0).toUpperCase() + (s.status || "pending").slice(1)}</Pill></td>
                   <td className="p-[9px_10px] border-b border-[rgba(255,255,255,0.03)]">
-                    <button onClick={() => toast.info(`Notification sent to ${s.sub_name}`)} className="px-3 py-1 font-raj text-[10px] font-bold tracking-[1px] bg-transparent border border-gold/20 text-mil-muted hover:text-cream hover:border-gold transition-all cursor-pointer">NOTIFY</button>
+                    <button onClick={async () => {
+                      await supabase.from('notifications').insert({
+                        type: 'general',
+                        title: `Sub contacted: ${s.sub_name}`,
+                        body: `Notification sent regarding job work scope`,
+                        job_id: jobId,
+                        job_name: jobName,
+                        from_user: 'Leo',
+                        to_user: 'Sonny',
+                        priority: 'normal',
+                      });
+                      toast.success(`Sonny notified about ${s.sub_name}`);
+                    }} className="px-3 py-1 font-raj text-[10px] font-bold tracking-[1px] bg-transparent border border-gold/20 text-mil-muted hover:text-cream hover:border-gold transition-all cursor-pointer">NOTIFY</button>
                   </td>
                 </tr>
               ))

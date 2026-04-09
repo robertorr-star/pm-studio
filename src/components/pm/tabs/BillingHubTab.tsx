@@ -262,11 +262,33 @@ ${rows}
         <Btn variant="green" size="sm" onClick={handleGenerate}>GENERATE INVOICE</Btn>
       </div>
 
-      <div className="flex items-center gap-3 mb-3 p-2 bg-[rgba(0,0,0,0.2)] border border-[rgba(255,255,255,0.05)]">
-        <span className="text-[9px] text-mil-muted font-raj tracking-wider uppercase whitespace-nowrap">Client Email:</span>
-        <input value={clientEmail} onChange={e => saveClientEmail(e.target.value)} placeholder="client@email.com — required to send invoices" className="flex-1 bg-transparent border-none text-cream text-xs outline-none placeholder:text-mil-muted" />
-        {clientEmail && <span className="text-[9px] text-ok">✓</span>}
-      </div>
+      {clientEmail ? (
+        <div className="flex items-center gap-3 mb-3 p-2 bg-[rgba(0,0,0,0.2)] border border-[rgba(255,255,255,0.05)]">
+          <span className="text-[9px] text-mil-muted font-raj tracking-wider uppercase whitespace-nowrap">Client Email:</span>
+          <span className="text-xs text-ok flex-1">{clientEmail}</span>
+          <button
+            onClick={() => {
+              const newEmail = prompt("Update client email:", clientEmail);
+              if (newEmail && newEmail !== clientEmail) saveClientEmail(newEmail);
+            }}
+            className="text-[9px] font-raj text-mil-muted hover:text-gold cursor-pointer bg-transparent border-none"
+          >
+            EDIT
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 mb-3 p-2 bg-[rgba(196,56,40,0.06)] border border-danger/20">
+          <span className="text-[9px] text-mil-muted font-raj tracking-wider uppercase whitespace-nowrap">Client Email:</span>
+          <input
+            value={clientEmail}
+            onChange={e => setClientEmail(e.target.value)}
+            onBlur={e => { if (e.target.value) saveClientEmail(e.target.value); }}
+            placeholder="Not set — enter email or update in Estimating Studio"
+            className="flex-1 bg-transparent border-none text-cream text-xs outline-none placeholder:text-danger/60"
+          />
+          <span className="text-[9px] text-danger font-raj">REQUIRED TO SEND</span>
+        </div>
+      )}
 
       <div className="overflow-x-auto">
         <table className="w-full text-[11px]" style={{ borderCollapse: "collapse" }}>

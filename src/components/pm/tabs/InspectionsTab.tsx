@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Inspection, Job } from "@/lib/types";
 import { SectionHeader, Panel, Btn, Label, Pill } from "../UIComponents";
@@ -35,6 +35,37 @@ const InspectionsTab = ({ job, inspections, onUpdate }: { job: Job; inspections:
   const [phase, setPhase] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [template, setTemplate] = useState<any[]>([]);
+  const [jobType, setJobType] = useState("general_remodel");
+
+  useEffect(() => {
+    const loadTemplate = async () => {
+      const { data: jobData } = await supabase.from("jobs").select("job_type").eq("id", job.id).single();
+      const type = (jobData as any)?.job_type || "general_remodel";
+      setJobType(type);
+      const { data: tpl } = await supabase.from("inspection_templates").select("inspections").eq("job_type", type).single();
+      if ((tpl as any)?.inspections) setTemplate((tpl as any).inspections);
+    };
+    loadTemplate();
+  }, [job.id]);
+
+  const getInspectionStatus = (inspectionId: string) => {
+    const match = inspections.find((i) =>
+      (i.inspection_type || "").toLowerCase().includes(inspectionId.replace(/_/g, " ").toLowerCase()) ||
+      (i.inspection_type || "").toUpperCase() === inspectionId.toUpperCase()
+    );
+    if (!match) return "not_requested";
+    const r = (match.result || "").toUpperCase();
+    if (r === "PASS" || r === "PASSED") return "passed";
+    if (r === "FAIL" || r === "FAILED") return "failed";
+    if (r === "SCHEDULED") return "scheduled";
+    if (r === "REQUESTED") return "requested";
+    return "not_requested";
+  };
+
+  const canRequest = (item: any) => {
+    return item.prerequisites.every((prereqId: string) => getInspectionStatus(prereqId) === "passed");
+  };
 
   const submitRequest = async () => {
     if (!type) { toast.error("Select an inspection type"); return; }
@@ -68,6 +99,69 @@ const InspectionsTab = ({ job, inspections, onUpdate }: { job: Job; inspections:
 
   return (
     <div className="animate-fade-up">
+      {/* Inspection Card — CA standard sequence */}
+      {template.length > 0 && (
+        <div className="mb-5">
+          <div className="font-raj text-sm font-bold text-gold tracking-wider uppercase mb-1">Inspection Card</div>
+          <div className="text-[10px] text-mil-muted mb-3">Standard CA sequence for {jobType.replace(/_/g, " ")} — prerequisites enforced</div>
+          <div className="border border-[rgba(255,255,255,0.06)] overflow-hidden">
+            <div className="grid grid-cols-[32px_1fr_80px_100px] gap-0 bg-[rgba(0,0,0,0.3)] px-3 py-2">
+              {["#", "Inspection", "Status", "Action"].map((h) => (
+                <div key={h} className="font-raj text-[9px] tracking-[2px] text-mil-muted uppercase">{h}</div>
+              ))}
+            </div>
+            {template.map((item: any, idx: number) => {
+              const status = getInspectionStatus(item.id);
+              const canReq = canRequest(item);
+              const statusColors: Record<string, string> = {
+                passed: "text-ok", failed: "text-danger", scheduled: "text-info",
+                requested: "text-warn", not_requested: "text-mil-muted"
+              };
+              const statusLabels: Record<string, string> = {
+                passed: "✓ PASS", failed: "✗ FAIL", scheduled: "SCHED",
+                requested: "REQSTD", not_requested: item.optional ? "OPTIONAL" : "—"
+              };
+              return (
+                <div key={item.id} className={`grid grid-cols-[32px_1fr_80px_100px] gap-0 px-3 py-2 border-b border-[rgba(255,255,255,0.03)] items-center ${status === "passed" ? "opacity-60" : ""}`}>
+                  <div className="font-mono text-[11px] text-mil-muted">{String(idx + 1).padStart(2, "0")}</div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-raj text-[9px] text-mil-muted border border-[rgba(255,255,255,0.1)] px-1">{item.abbrev}</span>
+                      <span className="text-xs text-cream">{item.name}</span>
+                      {item.optional && <span className="text-[8px] text-mil-muted">(if applicable)</span>}
+                    </div>
+                    {status === "not_requested" && !canReq && item.prerequisites.length > 0 && (
+                      <div className="text-[9px] text-mil-muted mt-[2px]">
+                        Waiting on: {item.prerequisites.filter((p: string) => getInspectionStatus(p) !== "passed").join(", ")}
+                      </div>
+                    )}
+                    {status === "not_requested" && canReq && (
+                      <div className="text-[9px] text-warn mt-[2px] font-raj">Ready: {item.required_work}</div>
+                    )}
+                  </div>
+                  <div className={`font-raj text-[10px] font-bold ${statusColors[status]}`}>
+                    {statusLabels[status]}
+                  </div>
+                  <div>
+                    {status === "not_requested" && canReq && (
+                      <button
+                        onClick={() => setShowForm(true)}
+                        className="px-2 py-1 font-raj text-[9px] font-bold tracking-[1px] bg-transparent border border-gold/30 text-gold hover:bg-gold/10 transition-all cursor-pointer"
+                      >
+                        REQUEST →
+                      </button>
+                    )}
+                    {status === "not_requested" && !canReq && (
+                      <span className="text-[9px] text-mil-muted font-raj">LOCKED</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-[14px]">
         <Label>Inspection Schedule</Label>
         <Btn variant="green" size="sm" onClick={() => setShowForm(!showForm)}>

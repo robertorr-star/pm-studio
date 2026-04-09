@@ -16,6 +16,7 @@ import SubsTab from "./tabs/SubsTab";
 import ClientCommsTab from "./tabs/ClientCommsTab";
 import BillingHubTab from "./tabs/BillingHubTab";
 import CalendarTab from "./tabs/CalendarTab";
+import DesignPermitTab from "./tabs/DesignPermitTab";
 import TradeAuthorizationCards from "./TradeAuthorizationCards";
 
 interface JobDetailProps {
@@ -28,6 +29,7 @@ interface JobDetailProps {
 
 const TABS = [
   { id: "overview", label: "Overview" },
+  { id: "design", label: "Design & Permit" },
   { id: "trades", label: "Trades" },
   { id: "schedule", label: "Schedule" },
   { id: "materials", label: "Materials" },
@@ -53,6 +55,7 @@ const JobDetail = ({ job, data, onClose, onDataChange, onJobUpdate }: JobDetailP
   const renderTab = () => {
     switch (activeTab) {
       case "overview": return <OverviewTab job={job} data={data} />;
+      case "design": return <DesignPermitTab job={job} jobId={job.id} />;
       case "trades": return <TradeAuthorizationCards jobId={job.id} jobName={job.name} />;
       case "schedule": return <ScheduleTab phases={data.phases} jobId={job.id} onPhasesChange={(p) => onDataChange({ ...data, phases: p })} onJobUpdate={onJobUpdate} />;
       case "materials": return <MaterialsTab materials={data.materials} jobId={job.id} />;

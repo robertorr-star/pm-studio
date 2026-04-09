@@ -102,6 +102,38 @@ const BillingHubTab = ({ job }: { job: Job }) => {
       }).eq("id", item.id);
     }
     await supabase.from("jobs").update({ contract_remaining: Math.max(0, totalRemaining - totalThisInvoice) } as any).eq("id", job.id);
+
+    // Gap 2 Fix: Sync billed amounts to estimate_line_items so Financial Studio KPIs update
+    try {
+      const { data: estimateData } = await supabase.from("estimates").select("id").eq("job_id", job.id).single();
+      if (estimateData?.id) {
+        const { data: lineItems } = await supabase.from("estimate_line_items")
+          .select("id, phase_name, line_item_total, billed_to_date")
+          .eq("estimate_id", estimateData.id);
+        if (lineItems && lineItems.length > 0) {
+          const lineItemsByPhase = new Map<string, typeof lineItems>();
+          lineItems.forEach(li => {
+            const phase = (li as any).phase_name || "Other";
+            if (!lineItemsByPhase.has(phase)) lineItemsByPhase.set(phase, []);
+            lineItemsByPhase.get(phase)!.push(li);
+          });
+          for (const item of linesToBill) {
+            const amt = invoiceAmounts[item.id];
+            const phase = item.phase_name || "Other";
+            const phaseLineItems = lineItemsByPhase.get(phase) || [];
+            if (phaseLineItems.length === 0) continue;
+            const phaseTotal = phaseLineItems.reduce((s, li) => s + Number((li as any).line_item_total || 0), 0);
+            for (const li of phaseLineItems) {
+              const proportion = phaseTotal > 0 ? Number((li as any).line_item_total || 0) / phaseTotal : 1 / phaseLineItems.length;
+              await supabase.from("estimate_line_items").update({
+                billed_to_date: Number((li as any).billed_to_date || 0) + amt * proportion,
+              } as any).eq("id", li.id);
+            }
+          }
+        }
+      }
+    } catch (syncErr) { console.error("Gap 2 sync error:", syncErr); }
+
     await supabase.from("notifications").insert({
       type: "invoice_generated", title: `Invoice sent: ${invoiceNumber}`,
       body: `${fmt$(totalThisInvoice)} — ${job.name} — ${clientEmail}`,

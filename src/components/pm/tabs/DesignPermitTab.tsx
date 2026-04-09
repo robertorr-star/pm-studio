@@ -56,13 +56,42 @@ interface Consultant {
   due_date: string | null; notes: string | null;
 }
 
+const TEST_TYPE_LABELS: Record<string, { name: string; why: string; enables: string; days: number }> = {
+  water_flow: { name: 'Water Flow Test', why: 'Required for fire sprinkler hydraulic calculations', enables: 'OCFA fire sprinkler submittal', days: 10 },
+  soils_geotech: { name: 'Soils / Geotechnical Investigation', why: 'Required for foundation design and building permit', enables: 'Structural foundation design + permit submittal', days: 35 },
+  hers_pre_permit: { name: 'HERS Pre-Permit Energy Review', why: 'Required to generate CF1R compliance certificate', enables: 'Building permit submittal', days: 7 },
+  hers_insulation: { name: 'HERS Insulation Field Verification', why: 'Required before insulation rough inspection', enables: 'Insulation inspection pass', days: 3 },
+  hers_duct_leakage: { name: 'HERS Duct Leakage Test', why: 'Required before HVAC can be covered', enables: 'HVAC rough inspection pass', days: 3 },
+  boundary_survey: { name: 'Boundary Survey', why: 'Required for accurate site plan and setback verification', enables: 'Site plan + grading plan', days: 21 },
+  topo_survey: { name: 'Topographic Survey', why: 'Required for grading plan design', enables: 'Grading plan + grading permit', days: 21 },
+  special_inspection: { name: 'Special Inspections Program', why: 'Required when structural engineer specifies', enables: 'Concrete pours, structural steel inspections', days: 0 },
+};
+
+const UTILITY_DEFAULTS: Record<string, any> = {
+  electric: { company: 'Southern California Edison', portal: 'https://www.sce.com', days: 5, critical: true },
+  gas: { company: 'Southern California Gas', portal: 'https://www.socalgas.com', days: 7, critical: false },
+  water: { company: 'Mutual Water Company', portal: '', days: 7, critical: true },
+  sewer: { company: 'OC Sanitation District', portal: 'https://www.ocsan.gov', days: 10, critical: true },
+  telecom: { company: 'AT&T or Spectrum', portal: '', days: 14, critical: false },
+};
+
+const UTIL_COLORS: Record<string, string> = {
+  not_started: 'text-danger', applied: 'text-warn', under_review: 'text-warn',
+  rep_assigned: 'text-info', design_complete: 'text-info', scheduled: 'text-gold',
+  installed: 'text-ok', complete: 'text-ok',
+};
+
 const DesignPermitTab = ({ job, jobId }: { job: any; jobId: string }) => {
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [submittals, setSubmittals] = useState<Submittal[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
   const [consultants, setConsultants] = useState<Consultant[]>([]);
+  const [tests, setTests] = useState<any[]>([]);
+  const [utilities, setUtilities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeSubmittalId, setActiveSubmittalId] = useState<string | null>(null);
+  const [expandedUtility, setExpandedUtility] = useState<string | null>(null);
+  const [showCallLog, setShowCallLog] = useState<string | null>(null);
 
   const [showAddDeliverable, setShowAddDeliverable] = useState(false);
   const [newDel, setNewDel] = useState({ type: 'architectural_plans', name: '', assigned_to: 'Sigfried', due_date: '', is_required: true });
@@ -75,6 +104,13 @@ const DesignPermitTab = ({ job, jobId }: { job: any; jobId: string }) => {
 
   const [showAddConsultant, setShowAddConsultant] = useState(false);
   const [newCon, setNewCon] = useState({ name: '', company: '', role: 'soils_engineer', email: '', phone: '', contract_amount: '', deliverable: '', due_date: '' });
+
+  const [showAddTest, setShowAddTest] = useState(false);
+  const [newTest, setNewTest] = useState({ test_type: 'water_flow', test_name: 'Water Flow Test', why_required: '', enables_what: '', provider_name: '', provider_phone: '', estimated_turnaround_days: 14, estimated_cost: '', follow_up_frequency_days: 5 });
+
+  const [showAddUtility, setShowAddUtility] = useState(false);
+  const [newUtility, setNewUtility] = useState({ utility_type: 'electric', utility_company: 'Southern California Edison', portal_url: 'https://www.sce.com', follow_up_frequency_days: 5, is_critical_path: true });
+  const [newCallLog, setNewCallLog] = useState({ contacted_by: 'Sonny', utility_rep_name: '', reference_number: '', status_reported: '', next_step: '', notes: '' });
 
   const loadData = async () => {
     const [delRes, subRes, conRes] = await Promise.all([
@@ -91,7 +127,95 @@ const DesignPermitTab = ({ job, jobId }: { job: any; jobId: string }) => {
       const { data: commData } = await supabase.from('plan_check_comments').select('*').in('submittal_round_id', ids).order('comment_number');
       setComments((commData || []) as Comment[]);
     }
+    const { data: testData } = await supabase.from('project_required_tests').select('*').eq('job_id', jobId).order('created_at');
+    setTests(testData || []);
+    const { data: utilData } = await supabase.from('utility_coordination').select('*').eq('job_id', jobId).order('utility_type');
+    setUtilities(utilData || []);
     setLoading(false);
+  };
+
+  const addTest = async () => {
+    const defaults = TEST_TYPE_LABELS[newTest.test_type] || { name: '', why: '', enables: '', days: 14 };
+    const { data } = await supabase.from('project_required_tests').insert({
+      job_id: jobId, job_name: job.name,
+      test_type: newTest.test_type,
+      test_name: newTest.test_name || defaults.name,
+      why_required: newTest.why_required || defaults.why,
+      enables_what: newTest.enables_what || defaults.enables,
+      provider_name: newTest.provider_name,
+      provider_phone: newTest.provider_phone,
+      estimated_turnaround_days: newTest.estimated_turnaround_days || defaults.days,
+      estimated_cost: newTest.estimated_cost ? parseFloat(newTest.estimated_cost) : null,
+      status: 'not_ordered',
+      follow_up_frequency_days: newTest.follow_up_frequency_days,
+      next_follow_up_date: new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0],
+    } as any).select().single();
+    if (data) setTests(prev => [...prev, data]);
+    setShowAddTest(false);
+    toast.success('Test requirement added');
+  };
+
+  const updateTestStatus = async (id: string, status: string) => {
+    const updates: any = { status };
+    if (status === 'complete') updates.completed_date = new Date().toISOString().split('T')[0];
+    await supabase.from('project_required_tests').update(updates).eq('id', id);
+    setTests(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+  };
+
+  const addUtility = async () => {
+    const defaults = UTILITY_DEFAULTS[newUtility.utility_type] || {};
+    const nextFollowUp = new Date();
+    nextFollowUp.setDate(nextFollowUp.getDate() + (newUtility.follow_up_frequency_days || 5));
+    const { data } = await supabase.from('utility_coordination').insert({
+      job_id: jobId, job_name: job.name,
+      utility_type: newUtility.utility_type,
+      utility_company: newUtility.utility_company || defaults.company,
+      portal_url: newUtility.portal_url || defaults.portal,
+      follow_up_frequency_days: newUtility.follow_up_frequency_days || defaults.days,
+      is_critical_path: newUtility.is_critical_path,
+      status: 'not_started',
+      follow_up_count: 0,
+      next_follow_up_date: nextFollowUp.toISOString().split('T')[0],
+    } as any).select().single();
+    if (data) setUtilities(prev => [...prev, data]);
+    setShowAddUtility(false);
+    toast.success('Utility tracking added');
+  };
+
+  const logCall = async (utilityId: string) => {
+    const { data } = await supabase.from('utility_contact_log').insert({
+      utility_coordination_id: utilityId, job_id: jobId,
+      contact_date: new Date().toISOString().split('T')[0],
+      contacted_by: newCallLog.contacted_by,
+      utility_rep_name: newCallLog.utility_rep_name,
+      reference_number: newCallLog.reference_number,
+      status_reported: newCallLog.status_reported,
+      next_step: newCallLog.next_step,
+      notes: newCallLog.notes,
+    } as any).select().single();
+    if (data) {
+      const util = utilities.find(u => u.id === utilityId);
+      const nextDate = new Date();
+      nextDate.setDate(nextDate.getDate() + (util?.follow_up_frequency_days || 5));
+      await supabase.from('utility_coordination').update({
+        last_contact_date: new Date().toISOString().split('T')[0],
+        last_contact_person: newCallLog.utility_rep_name,
+        last_contact_notes: newCallLog.notes,
+        last_contact_reference: newCallLog.reference_number,
+        status: newCallLog.status_reported || util?.status,
+        follow_up_count: (util?.follow_up_count || 0) + 1,
+        next_follow_up_date: nextDate.toISOString().split('T')[0],
+      } as any).eq('id', utilityId);
+      setUtilities(prev => prev.map(u => u.id === utilityId ? {
+        ...u, last_contact_date: new Date().toISOString().split('T')[0],
+        last_contact_person: newCallLog.utility_rep_name,
+        follow_up_count: (u.follow_up_count || 0) + 1,
+        next_follow_up_date: nextDate.toISOString().split('T')[0],
+      } : u));
+      setNewCallLog({ contacted_by: 'Sonny', utility_rep_name: '', reference_number: '', status_reported: '', next_step: '', notes: '' });
+      setShowCallLog(null);
+      toast.success('Call logged. Next follow-up: ' + nextDate.toLocaleDateString());
+    }
   };
 
   useEffect(() => { loadData(); }, [jobId]);
@@ -309,7 +433,256 @@ const DesignPermitTab = ({ job, jobId }: { job: any; jobId: string }) => {
         )}
       </div>
 
-      {/* ─── SECTION 2: PLAN CHECK SUBMITTALS ───────────────────── */}
+      {/* ─── SECTION 2: REQUIRED TESTS ──────────────────────────── */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <Label>Required Tests</Label>
+            <div className="text-[9px] text-mil-muted mt-1">Must be ordered and completed BEFORE the submittals that depend on them</div>
+          </div>
+          <Btn size="sm" onClick={() => setShowAddTest(!showAddTest)}>{showAddTest ? 'CANCEL' : '+ ADD TEST'}</Btn>
+        </div>
+
+        {showAddTest && (
+          <div className="bg-[rgba(0,0,0,0.2)] border border-gold/10 p-3 mb-3">
+            <div className="grid grid-cols-2 gap-3 mb-2">
+              <div>
+                <label className="text-[9px] text-mil-muted font-raj tracking-wider uppercase block mb-1">Test Type</label>
+                <select value={newTest.test_type}
+                  onChange={e => {
+                    const defaults = TEST_TYPE_LABELS[e.target.value] || { name: '', why: '', enables: '', days: 14 };
+                    setNewTest(f => ({ ...f, test_type: e.target.value, test_name: defaults.name, why_required: defaults.why, enables_what: defaults.enables, estimated_turnaround_days: defaults.days }));
+                  }}
+                  className="w-full bg-ink border border-[rgba(255,255,255,0.1)] text-cream text-xs px-2 py-[6px] outline-none">
+                  {Object.entries(TEST_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[9px] text-mil-muted font-raj tracking-wider uppercase block mb-1">Provider</label>
+                <input value={newTest.provider_name} onChange={e => setNewTest(f => ({...f, provider_name: e.target.value}))}
+                  placeholder="Company name" className="w-full bg-ink border border-[rgba(255,255,255,0.1)] text-cream text-xs px-2 py-[6px] outline-none" />
+              </div>
+              <div>
+                <label className="text-[9px] text-mil-muted font-raj tracking-wider uppercase block mb-1">Why Required</label>
+                <input value={newTest.why_required} onChange={e => setNewTest(f => ({...f, why_required: e.target.value}))}
+                  className="w-full bg-ink border border-[rgba(255,255,255,0.1)] text-cream text-xs px-2 py-[6px] outline-none" />
+              </div>
+              <div>
+                <label className="text-[9px] text-mil-muted font-raj tracking-wider uppercase block mb-1">Enables</label>
+                <input value={newTest.enables_what} onChange={e => setNewTest(f => ({...f, enables_what: e.target.value}))}
+                  className="w-full bg-ink border border-[rgba(255,255,255,0.1)] text-cream text-xs px-2 py-[6px] outline-none" />
+              </div>
+            </div>
+            <Btn variant="green" size="sm" onClick={addTest}>ADD TEST</Btn>
+          </div>
+        )}
+
+        {tests.length === 0 ? (
+          <div className="text-mil-muted text-xs p-3">No required tests added yet. Common for new construction: water flow test, soils investigation, boundary survey, HERS pre-permit.</div>
+        ) : (
+          <div className="space-y-2">
+            {tests.map(test => {
+              const isOverdue = test.next_follow_up_date && new Date(test.next_follow_up_date) < new Date() && !['complete'].includes(test.status);
+              return (
+                <div key={test.id} className={`px-3 py-2 ${isOverdue ? 'bg-[rgba(196,56,40,0.05)] border border-danger/20' : 'bg-[rgba(0,0,0,0.15)]'}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-bold ${test.status === 'complete' ? 'text-ok line-through' : 'text-cream'}`}>{test.test_name}</span>
+                        {isOverdue && <span className="text-[8px] text-danger font-raj font-bold">FOLLOW UP NOW</span>}
+                      </div>
+                      <div className="text-[10px] text-mil-muted">
+                        {test.enables_what && <span>Enables: <span className="text-gold">{test.enables_what}</span></span>}
+                        {test.provider_name && <span className="ml-2">· {test.provider_name}</span>}
+                        {test.estimated_turnaround_days && <span className="ml-2">· ~{test.estimated_turnaround_days}d turnaround</span>}
+                      </div>
+                      {test.why_required && <div className="text-[10px] text-mil-muted italic">{test.why_required}</div>}
+                    </div>
+                    <select value={test.status} onChange={e => updateTestStatus(test.id, e.target.value)}
+                      className={`bg-transparent border border-[rgba(255,255,255,0.1)] text-[10px] px-2 py-1 outline-none cursor-pointer ml-3 ${test.status === 'complete' ? 'text-ok' : test.status === 'not_ordered' ? 'text-danger' : 'text-warn'}`}>
+                      <option value="not_ordered">NOT ORDERED</option>
+                      <option value="ordering">ORDERING</option>
+                      <option value="ordered">ORDERED</option>
+                      <option value="scheduled">SCHEDULED</option>
+                      <option value="in_progress">IN PROGRESS</option>
+                      <option value="complete">COMPLETE ✓</option>
+                    </select>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ─── SECTION 3: UTILITY COORDINATION ────────────────────── */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <Label>Utility Coordination</Label>
+            <div className="text-[9px] text-mil-muted mt-1">Track every utility — Edison takes 12-20 weeks. Order on Day 1.</div>
+          </div>
+          <Btn size="sm" onClick={() => setShowAddUtility(!showAddUtility)}>{showAddUtility ? 'CANCEL' : '+ ADD UTILITY'}</Btn>
+        </div>
+
+        {!utilities.some(u => u.utility_type === 'electric') && (
+          <div className="mb-3 p-2 bg-[rgba(196,56,40,0.06)] border border-danger/20">
+            <div className="text-[10px] text-danger font-raj font-bold">⚠ SOUTHERN CALIFORNIA EDISON NOT ADDED — Edison takes 12-20 WEEKS. Add and apply TODAY.</div>
+          </div>
+        )}
+
+        {showAddUtility && (
+          <div className="bg-[rgba(0,0,0,0.2)] border border-gold/10 p-3 mb-3">
+            <div className="grid grid-cols-2 gap-3 mb-2">
+              <div>
+                <label className="text-[9px] text-mil-muted font-raj tracking-wider uppercase block mb-1">Type</label>
+                <select value={newUtility.utility_type}
+                  onChange={e => {
+                    const d = UTILITY_DEFAULTS[e.target.value] || {};
+                    setNewUtility(f => ({ ...f, utility_type: e.target.value, utility_company: d.company || '', portal_url: d.portal || '', follow_up_frequency_days: d.days || 7, is_critical_path: d.critical !== false }));
+                  }}
+                  className="w-full bg-ink border border-[rgba(255,255,255,0.1)] text-cream text-xs px-2 py-[6px] outline-none">
+                  <option value="electric">Electric (SCE / Edison)</option>
+                  <option value="gas">Gas (SoCalGas)</option>
+                  <option value="water">Water District</option>
+                  <option value="sewer">Sewer / Wastewater</option>
+                  <option value="telecom">Telecom (AT&T / Spectrum)</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[9px] text-mil-muted font-raj tracking-wider uppercase block mb-1">Company</label>
+                <input value={newUtility.utility_company} onChange={e => setNewUtility(f => ({...f, utility_company: e.target.value}))}
+                  className="w-full bg-ink border border-[rgba(255,255,255,0.1)] text-cream text-xs px-2 py-[6px] outline-none" />
+              </div>
+              <div>
+                <label className="text-[9px] text-mil-muted font-raj tracking-wider uppercase block mb-1">Follow-Up Every (days)</label>
+                <input type="number" value={newUtility.follow_up_frequency_days} onChange={e => setNewUtility(f => ({...f, follow_up_frequency_days: parseInt(e.target.value)}))}
+                  className="w-full bg-ink border border-[rgba(255,255,255,0.1)] text-cream text-xs px-2 py-[6px] outline-none" />
+              </div>
+              <div className="flex items-center gap-2 pt-4">
+                <input type="checkbox" checked={newUtility.is_critical_path} onChange={e => setNewUtility(f => ({...f, is_critical_path: e.target.checked}))} className="accent-gold" />
+                <label className="text-[10px] text-cream">Critical path (blocks final inspection)</label>
+              </div>
+            </div>
+            <Btn variant="green" size="sm" onClick={addUtility}>ADD UTILITY</Btn>
+          </div>
+        )}
+
+        {utilities.length === 0 ? (
+          <div className="text-mil-muted text-xs p-3">No utilities added yet.</div>
+        ) : (
+          <div className="space-y-2">
+            {utilities.map(util => {
+              const followUpOverdue = util.next_follow_up_date && new Date(util.next_follow_up_date) < new Date() && !['complete', 'installed'].includes(util.status);
+              const daysSinceContact = util.last_contact_date ? Math.floor((Date.now() - new Date(util.last_contact_date).getTime()) / 86400000) : null;
+              return (
+                <div key={util.id} className={`border ${followUpOverdue ? 'border-danger/30 bg-[rgba(196,56,40,0.05)]' : 'border-[rgba(255,255,255,0.06)]'}`}>
+                  <div className="flex items-center gap-3 px-3 py-2 cursor-pointer" onClick={() => setExpandedUtility(expandedUtility === util.id ? null : util.id)}>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-cream font-bold">{util.utility_company}</span>
+                        {util.is_critical_path && <span className="text-[8px] font-raj text-warn">CRITICAL PATH</span>}
+                        {followUpOverdue && <span className="text-[8px] font-raj font-bold text-danger bg-[rgba(196,56,40,0.1)] px-1 animate-blink">CALL NOW</span>}
+                      </div>
+                      <div className="text-[10px] text-mil-muted">
+                        {util.follow_up_count > 0 && <span>{util.follow_up_count} follow-ups logged</span>}
+                        {daysSinceContact !== null && <span className="ml-2">Last contact: {daysSinceContact}d ago</span>}
+                        {util.application_number && <span className="ml-2">App #: {util.application_number}</span>}
+                      </div>
+                    </div>
+                    <span className={`font-raj text-[11px] font-bold ${UTIL_COLORS[util.status] || 'text-mil-muted'}`}>
+                      {(util.status || '').replace(/_/g, ' ').toUpperCase()}
+                    </span>
+                    <span className="text-[8px] text-mil-muted">{expandedUtility === util.id ? '▲' : '▼'}</span>
+                  </div>
+
+                  {expandedUtility === util.id && (
+                    <div className="px-3 pb-3 border-t border-[rgba(255,255,255,0.05)]">
+                      <div className="grid grid-cols-3 gap-3 mt-3 mb-3">
+                        <div>
+                          <div className="text-[9px] text-mil-muted font-raj uppercase mb-1">Application #</div>
+                          <input defaultValue={util.application_number || ''} onBlur={async e => {
+                            await supabase.from('utility_coordination').update({ application_number: e.target.value } as any).eq('id', util.id);
+                            setUtilities(prev => prev.map(u => u.id === util.id ? { ...u, application_number: e.target.value } : u));
+                          }} placeholder="Enter when received" className="w-full bg-ink border border-[rgba(255,255,255,0.1)] text-cream text-[10px] px-2 py-1 outline-none" />
+                        </div>
+                        <div>
+                          <div className="text-[9px] text-mil-muted font-raj uppercase mb-1">Assigned Rep</div>
+                          <input defaultValue={util.assigned_rep_name || ''} onBlur={async e => {
+                            await supabase.from('utility_coordination').update({ assigned_rep_name: e.target.value } as any).eq('id', util.id);
+                          }} placeholder="Get their direct line" className="w-full bg-ink border border-[rgba(255,255,255,0.1)] text-cream text-[10px] px-2 py-1 outline-none" />
+                        </div>
+                        <div>
+                          <div className="text-[9px] text-mil-muted font-raj uppercase mb-1">Rep Direct Line</div>
+                          <input defaultValue={util.assigned_rep_phone || ''} onBlur={async e => {
+                            await supabase.from('utility_coordination').update({ assigned_rep_phone: e.target.value } as any).eq('id', util.id);
+                          }} className="w-full bg-ink border border-[rgba(255,255,255,0.1)] text-cream text-[10px] px-2 py-1 outline-none" />
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 mb-3">
+                        <select value={util.status} onChange={async e => {
+                          await supabase.from('utility_coordination').update({ status: e.target.value } as any).eq('id', util.id);
+                          setUtilities(prev => prev.map(u => u.id === util.id ? { ...u, status: e.target.value } : u));
+                        }} className="bg-ink border border-[rgba(255,255,255,0.1)] text-cream text-[10px] px-2 py-1 outline-none cursor-pointer">
+                          <option value="not_started">Not Started</option>
+                          <option value="applied">Applied</option>
+                          <option value="under_review">Under Review</option>
+                          <option value="rep_assigned">Rep Assigned</option>
+                          <option value="design_complete">Design Complete</option>
+                          <option value="scheduled">Scheduled for Install</option>
+                          <option value="installed">Installed</option>
+                          <option value="complete">Complete ✓</option>
+                        </select>
+                        <button onClick={() => setShowCallLog(showCallLog === util.id ? null : util.id)}
+                          className={`px-3 py-1 font-raj text-[10px] font-bold cursor-pointer border bg-transparent ${followUpOverdue ? 'border-danger text-danger hover:bg-[rgba(196,56,40,0.1)]' : 'border-gold/20 text-gold hover:bg-[rgba(201,168,76,0.1)]'}`}>
+                          LOG CALL / CONTACT
+                        </button>
+                        {util.portal_url && (
+                          <a href={util.portal_url} target="_blank" rel="noopener noreferrer"
+                            className="px-3 py-1 font-raj text-[10px] border border-[rgba(255,255,255,0.1)] text-mil-muted hover:text-cream cursor-pointer">
+                            PORTAL →
+                          </a>
+                        )}
+                      </div>
+
+                      {showCallLog === util.id && (
+                        <div className="bg-[rgba(0,0,0,0.25)] p-3 mb-3 border border-[rgba(255,255,255,0.05)]">
+                          <div className="grid grid-cols-2 gap-2 mb-2">
+                            <input value={newCallLog.utility_rep_name} onChange={e => setNewCallLog(f => ({...f, utility_rep_name: e.target.value}))}
+                              placeholder="Rep name you spoke to" className="bg-ink border border-[rgba(255,255,255,0.1)] text-cream text-[10px] px-2 py-1 outline-none" />
+                            <input value={newCallLog.reference_number} onChange={e => setNewCallLog(f => ({...f, reference_number: e.target.value}))}
+                              placeholder="Reference/ticket number (ALWAYS ASK)" className="bg-ink border border-[rgba(255,255,255,0.1)] text-cream text-[10px] px-2 py-1 outline-none" />
+                            <input value={newCallLog.status_reported} onChange={e => setNewCallLog(f => ({...f, status_reported: e.target.value}))}
+                              placeholder="Status they reported" className="bg-ink border border-[rgba(255,255,255,0.1)] text-cream text-[10px] px-2 py-1 outline-none" />
+                            <input value={newCallLog.next_step} onChange={e => setNewCallLog(f => ({...f, next_step: e.target.value}))}
+                              placeholder="What they said happens next" className="bg-ink border border-[rgba(255,255,255,0.1)] text-cream text-[10px] px-2 py-1 outline-none" />
+                          </div>
+                          <textarea value={newCallLog.notes} onChange={e => setNewCallLog(f => ({...f, notes: e.target.value}))}
+                            placeholder="Full notes from the call..." rows={2}
+                            className="w-full bg-ink border border-[rgba(255,255,255,0.1)] text-cream text-[10px] px-2 py-1 outline-none resize-none mb-2" />
+                          <div className="flex gap-2">
+                            <Btn variant="green" size="sm" onClick={() => logCall(util.id)}>LOG CALL</Btn>
+                            <div className="text-[9px] text-mil-muted self-center">Next follow-up auto-set to {util.follow_up_frequency_days} days from now</div>
+                          </div>
+                        </div>
+                      )}
+
+                      {util.last_contact_date && (
+                        <div className="text-[10px] text-mil-muted bg-[rgba(0,0,0,0.15)] px-2 py-1">
+                          Last contact: {util.last_contact_date} — {util.last_contact_person} — {util.last_contact_notes?.substring(0, 100)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ─── SECTION 4: PLAN CHECK SUBMITTALS ───────────────────── */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <Label>Plan Check / Submittal Tracker</Label>

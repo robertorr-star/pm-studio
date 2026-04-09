@@ -59,9 +59,9 @@ const JobDetail = ({ job, data, onClose, onDataChange, onJobUpdate }: JobDetailP
       case "fieldlog": return <FieldLogTab logs={data.fieldLogs} jobId={job.id} onLogsChange={(l) => onDataChange({ ...data, fieldLogs: l })} />;
       case "messages": return <MessagesTab messages={data.messages} jobId={job.id} onMessagesChange={(m) => onDataChange({ ...data, messages: m })} />;
       case "tasks": return <TasksTab tasks={data.tasks} jobId={job.id} onTasksChange={(t) => onDataChange({ ...data, tasks: t })} />;
-      case "inspections": return <InspectionsTab inspections={data.inspections} />;
+      case "inspections": return <InspectionsTab inspections={data.inspections} jobId={job.id} />;
       case "manhours": return <ManHoursTab manHours={data.manHours} jobId={job.id} onManHoursChange={(mh) => onDataChange({ ...data, manHours: mh })} />;
-      case "photos": return <PhotosTab />;
+      case "photos": return <PhotosTab jobId={job.id} jobName={job.name} />;
       case "punchlist": return <PunchListTab punchItems={[]} jobId={job.id} onItemsChange={() => {}} />;
       case "changeorders": return <ChangeOrdersTab changeOrders={data.changeOrders} jobId={job.id} />;
       case "documents": return <DocumentsTab job={job} data={data} />;

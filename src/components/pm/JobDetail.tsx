@@ -17,6 +17,7 @@ import ClientCommsTab from "./tabs/ClientCommsTab";
 import BillingHubTab from "./tabs/BillingHubTab";
 import CalendarTab from "./tabs/CalendarTab";
 import DesignPermitTab from "./tabs/DesignPermitTab";
+import AIAssistantPanel from "./AIAssistantPanel";
 import TradeAuthorizationCards from "./TradeAuthorizationCards";
 
 interface JobDetailProps {
@@ -132,6 +133,7 @@ const JobDetail = ({ job, data, onClose, onDataChange, onJobUpdate }: JobDetailP
 
       <div className="p-[22px]">{renderTab()}</div>
     </div>
+    <AIAssistantPanel job={job} data={data} currentUser="Leo" currentTab={activeTab} />
   );
 };
 
